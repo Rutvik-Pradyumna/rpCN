@@ -17,5 +17,6 @@
         "ranges": "cpp",
         "span": "cpp",
         "regex": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

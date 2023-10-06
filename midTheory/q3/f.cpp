@@ -93,7 +93,6 @@ int main(){
             }
         }
         else if(pfd[1].revents & POLLIN){
-            cout<<"hehe"<<endl;
             char buff[100]={'\0'};
             recvfrom(pfd[1].fd,buff,sizeof(buff),0,(struct sockaddr*)&cAddr,(socklen_t*)&adrlen);
             // send ports of all servers - Si
