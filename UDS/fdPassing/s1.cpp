@@ -3,7 +3,9 @@
 #include<arpa/inet.h>
 #include<sys/un.h>
 using namespace std;
-#define PATH "fdShare"
+#define PATH "tos2"
+#define PATH2 "tos1"
+
 struct sockaddr_in sAddr,cAddr;
 int adrlen=sizeof(sAddr);
 /*
@@ -97,6 +99,20 @@ int main(){
     cout<<"got "<<buff<<endl;
 
     sendFD(nsfd);
-    close(nsfd);
-    while(1);
+    
+    struct sockaddr_un s1Addr;
+    s1Addr.sun_family=AF_UNIX;
+    strcpy(s1Addr.sun_path,PATH2);
+    int usfd=socket(AF_UNIX,SOCK_DGRAM,0);
+    unlink(PATH2);
+    if(bind(usfd,(struct sockaddr*)&s1Addr,sizeof(s1Addr))<0){
+        perror("usfd bind");
+        exit(EXIT_FAILURE);
+    }
+    
+    while(1){
+        char msg[20]={'\0'};
+        recvfrom(usfd,msg,sizeof(msg),0,(struct sockaddr*)&s1Addr,(socklen_t*)&adrlen);
+        cout<<"got "<<msg<<endl;
+    }
 }

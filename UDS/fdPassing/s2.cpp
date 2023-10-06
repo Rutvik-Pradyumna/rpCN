@@ -2,7 +2,8 @@
 #include<sys/socket.h>
 #include<sys/un.h>
 using namespace std;
-#define PATH "fdShare"
+#define PATH "tos2"
+#define PATH2 "tos1"
 
 int getFD(){
     int usfd=socket(AF_UNIX,SOCK_DGRAM,0);
@@ -40,12 +41,18 @@ int main(){
     int nsfd=getFD();
     if(nsfd>0) cout<<"Recieved nsfd"<<endl;
 
+    int usfd=socket(AF_UNIX,SOCK_DGRAM,0);
+    struct sockaddr_un s1Addr;
+    s1Addr.sun_family=AF_UNIX;
+    strcpy(s1Addr.sun_path,PATH2);
+
     while(1){
         char msg[20]="From s2";
         send(nsfd,msg,sizeof(msg),0);
         char buff[20]={'\0'};
         recv(nsfd,buff,sizeof(buff),0);
-        cout<<"got "<<buff<<endl;
+        int st=sendto(usfd,buff,sizeof(buff),0,(struct sockaddr*)&s1Addr,sizeof(s1Addr));
+        cout<<"got "<<buff<<" "<<st<<endl;
     }
 
 }
