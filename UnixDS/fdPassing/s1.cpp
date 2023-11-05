@@ -56,7 +56,8 @@ void sendFD(int &fd){
     strcpy(myAddr.sun_path,PATH);
 
     struct iovec ioVector;
-    ioVector.iov_base=NULL;     ioVector.iov_len=0;
+    char msg[8]="From s1";
+    ioVector.iov_base=msg;     ioVector.iov_len=sizeof(msg);
 
     char cmsg[CMSG_SPACE(sizeof(int))];
     struct msghdr socket_msg;

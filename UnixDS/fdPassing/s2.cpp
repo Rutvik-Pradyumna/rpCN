@@ -16,9 +16,9 @@ int getFD(){
         perror("bind");
         exit(EXIT_FAILURE);
     }
-
+    char msg[10];
     struct iovec ioVector;
-    ioVector.iov_base=NULL;     ioVector.iov_len=0;
+    ioVector.iov_base=msg;     ioVector.iov_len=sizeof(msg);
 
     char cmsg[CMSG_SPACE(sizeof(int))];
     struct msghdr socket_msg;
@@ -32,7 +32,7 @@ int getFD(){
         perror("recvmsg");
         exit(EXIT_FAILURE);
     }
-
+    cout<<"got "<<msg<<endl;
     struct cmsghdr *c=CMSG_FIRSTHDR(&socket_msg);
     return *(int*)CMSG_DATA(c);
 }

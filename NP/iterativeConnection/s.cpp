@@ -22,7 +22,7 @@ int main(){
     struct sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(8080);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;  // Listen on all available network interfaces
+    serverAddress.sin_addr.s_addr = inet_addr("127.8.8.8");
     if(bind(sfd,(struct sockaddr*)&serverAddress,sizeof(serverAddress))<0){
         perror("Error in bind()");
         return 0;

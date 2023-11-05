@@ -13,7 +13,7 @@ int main(){
     struct sockaddr_in serverAddr;
     serverAddr.sin_family=AF_INET;
     serverAddr.sin_port=htons(8080);
-    if(inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr)<=0){
+    if(inet_pton(AF_INET, "127.8.8.8", &serverAddr.sin_addr)<=0){
         perror("Error in address");
         return 0;
     }

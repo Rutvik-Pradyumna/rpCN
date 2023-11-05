@@ -18,7 +18,7 @@ int main(){
     createSocket(sfd);
     sAddr.sin_family = AF_INET; 
     sAddr.sin_port = htons(8080); 
-    sAddr.sin_addr.s_addr = INADDR_ANY; 
+    sAddr.sin_addr.s_addr = inet_addr("127.8.8.8"); 
     string msg="From Client";
     sendto(sfd,msg.c_str(),msg.size(),0,(struct sockaddr*)&sAddr,adrlen);
     cout<<"Sent"<<endl;

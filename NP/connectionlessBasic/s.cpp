@@ -23,7 +23,7 @@ void setSockOpt(int &sfd){
 
 void bindSocket(int &sfd,int port){
     sAddr.sin_family=AF_INET;
-    sAddr.sin_addr.s_addr=INADDR_ANY;
+    sAddr.sin_addr.s_addr=inet_addr("127.8.8.8");
     sAddr.sin_port=htons(port);
     if(bind(sfd, (struct sockaddr*)&sAddr, adrlen)<0){
         perror("bind err");
