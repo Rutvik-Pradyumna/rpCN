@@ -1,0 +1,3 @@
+A raw socket is a type of socket that allows access to the underlying transport provider.
+This topic focuses only on raw sockets and the IPv4 and IPv6 protocols.
+This is because most other protocols with the exception of ATM do not support raw sockets.18-Jan-2022
