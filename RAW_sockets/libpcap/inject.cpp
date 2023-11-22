@@ -1,27 +1,19 @@
 #include<bits/stdc++.h>
 #include<sys/socket.h>
 #include<arpa/inet.h>
-#include<netinet/ether.h>
-#include<netinet/if_ether.h>        // for arp_hdr
+#include <netinet/ether.h>
+#include <netinet/if_ether.h>
 #include<linux/ip.h>
 #include<linux/udp.h>
 #include<linux/tcp.h>
 #include<linux/if_packet.h>         // for sockaddr_ll
 #include<net/if.h>                  //for ifreq   
 #include<sys/ioctl.h>
+#include<pcap.h>
 using namespace std;
-
-struct _arphdr {
-    uint16_t htype;
-    uint16_t ptype;
-    uint8_t hlen;
-    uint8_t plen;
-    uint16_t opcode;
-    uint8_t sender_mac[6];
-    uint8_t sender_ip[4];
-    uint8_t target_mac[6];
-    uint8_t target_ip[4];
-};
+char errbuff[PCAP_ERRBUF_SIZE];
+char *device;
+pcap_t* handler;
 
 struct PseudoHeader{
     unsigned long int sourceIP;
@@ -30,37 +22,6 @@ struct PseudoHeader{
     unsigned char protocol;
     unsigned short int protoLen;    // can be tcp/udp
 };
-
-int getRsfd(){
-    int rsfd=socket(AF_PACKET,SOCK_RAW,IPPROTO_RAW);
-    if(rsfd<0){
-        perror("rsock");
-        exit(0);
-    }
-
-    struct sockaddr_ll sll;
-    struct ifreq ifr;
-
-    bzero(&sll,sizeof(sll));
-    bzero(&ifr,sizeof(ifr));
-
-    strncpy((char*)ifr.ifr_name,"wlo1",IFNAMSIZ);
-    if(ioctl(rsfd,SIOCGIFINDEX,&ifr)==-1){
-        perror("ioctl");
-        exit(0);
-    }
-
-    sll.sll_family=AF_PACKET;
-    sll.sll_ifindex=ifr.ifr_ifindex;
-    sll.sll_protocol=htons(ETH_P_IP);
-
-    if(bind(rsfd,(struct sockaddr*)&sll,sizeof(sll))<0){
-        perror("bind");
-        exit(0);
-    }
-
-    return rsfd;
-}
 
 unsigned short csum(unsigned char *data,int len) 
 {
@@ -159,14 +120,13 @@ struct udphdr *createUDPHdr(){
     return udpHdr;
 }
 
-struct ethhdr *createEthHdr(string proto){
+struct ethhdr *createEthHdr(){
     struct ethhdr *ethHdr;
     ethHdr=(struct ethhdr*)malloc(sizeof(struct ethhdr));
 
-    memcpy(ethHdr->h_source,ether_aton("11:22:33:44:55:66"),6);
+    memcpy(ethHdr->h_source,ether_aton("00:00:00:00:00:00"),6);
     memcpy(ethHdr->h_dest,ether_aton("00:00:00:00:00:00"),6);
-    if(proto=="ip") ethHdr->h_proto=htons(ETH_P_IP);
-    // else if(proto=="arp") ethHdr->h_proto=htons(ETH_P_ARP);
+    ethHdr->h_proto=htons(ETH_P_IP);
 
     return ethHdr;
 }
@@ -240,16 +200,6 @@ void sendARP(int rsfd){
 }
 
 int main(){
-    int rsfd=getRsfd();
-
-    int flag=0;
-    cout<<"Enter 1 to send arp packet : ";
-    cin>>flag;
-    if(flag){
-        sendARP(rsfd);
-        exit(EXIT_SUCCESS);
-    }
-
     unsigned char *packet;
 
     const char *data = "From injector"; 
@@ -262,7 +212,7 @@ int main(){
     cout<<"Give protocol : ";
     cin>>proto;
 
-    struct ethhdr *ethHdr=createEthHdr("ip");
+    struct ethhdr *ethHdr=createEthHdr();
 
     struct iphdr *ipHdr;
     ipHdr=createIPHdr(proto);
@@ -292,10 +242,23 @@ int main(){
     if(proto==6) memcpy((packet+sizeof(struct ethhdr)+ipHdr->ihl*4+tcpHdr->doff*4),data,100);
     else memcpy((packet+sizeof(struct ethhdr)+ipHdr->ihl*4+sizeof(struct udphdr)),data,100);
 
-    struct sockaddr_in caddr;
-    caddr.sin_family=AF_INET;
-    caddr.sin_addr.s_addr=INADDR_ANY;
-    int st=send(rsfd,packet,pcktlen,0);
-    if(st<0) perror("send");
+    cout<<"device name : ";
+    string devStr;
+    cin>>devStr;
+    device = new char[devStr.length() + 1];
+    strcpy(device,devStr.c_str());
 
+    if((handler=pcap_open_live(device,BUFSIZ,0,1000,errbuff))==NULL){
+        cout<<"openlive err : "<<errbuff<<endl;
+        exit(0);
+    }
+
+    if (pcap_inject(handler,packet,pcktlen)==-1) {
+        pcap_perror(handler,0);
+        pcap_close(handler);
+        exit(1);
+    }
+
+    pcap_close(handler);
+    return 0;
 }

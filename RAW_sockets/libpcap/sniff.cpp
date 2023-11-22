@@ -1,21 +1,71 @@
 #include<bits/stdc++.h>
-#include<sys/socket.h>
-#include<arpa/inet.h>
+#include<pcap.h>
+#include<netinet/ether.h>
+#include<netinet/ip.h>
+#include<netinet/udp.h>
+#include<netinet/tcp.h>
 #include<netinet/if_ether.h>
-#include<linux/if_ether.h>      // for ETH_P_IP | ETH_P_ALL
-#include<linux/ip.h>
-#include<linux/udp.h>
-#include<linux/tcp.h>
 using namespace std;
+char errbuff[PCAP_ERRBUF_SIZE];
+char *device;
+pcap_t *handler;
+bpf_u_int32 netp;
+bpf_u_int32 maskp;
 
-int getRsfd(){
-    int rsfd=socket(AF_PACKET,SOCK_RAW,htons(ETH_P_ALL)); // here protocol is for what protos we can hear
-    if(rsfd<0){
-        perror("rsock");
+void findAllDevs(){
+    pcap_if_t *alldevsp;
+    if(pcap_findalldevs(&alldevsp,errbuff)<0){
+        cout<<"findalldevs err : "<<errbuff<<endl;
+        exit(0);
+    }
+    pcap_if_t *dev=alldevsp;
+    while (dev != NULL) {
+        cout << "Interface name: " << dev->name << endl;
+        if(dev->description) cout << "Interface desc: " << dev->description << endl;
+        pcap_addr_t *dev_addr; //interface address that used by pcap_findalldevs()
+
+        /* check if the device capturable*/
+        for (dev_addr = dev->addresses; dev_addr != NULL; dev_addr = dev_addr->next) {
+            if (dev_addr->addr->sa_family == AF_INET && dev_addr->addr && dev_addr->netmask) {
+                const string interface_ip = inet_ntoa(reinterpret_cast<struct sockaddr_in*>(dev_addr->addr)->sin_addr);
+                const string interface_netmask = inet_ntoa(reinterpret_cast<struct sockaddr_in*>(dev_addr->netmask)->sin_addr);
+                cout<<"ip : "<<interface_ip<<endl;
+                cout<<"netmask : "<<interface_netmask<<endl;
+            }
+        }
+        cout<<"----------------------\n"<<endl;
+        dev=dev->next;
+    }
+    // Free the list when done
+    pcap_freealldevs(alldevsp);
+}
+
+void getDevInfo(){
+    if(pcap_lookupnet(device,&netp,&maskp,errbuff)<0){
+        cout<<"lookupnet err : "<<errbuff<<endl;
+        exit(0);
+    }
+    // printing ip & subnetmask in human readable format
+    char ip[13];
+    char subnet_mask[13];
+    struct in_addr addr;
+
+    addr.s_addr=netp;
+    strcpy(ip,inet_ntoa(addr));
+    if (ip == NULL) {
+        perror("inet_ntoa");
         exit(0);
     }
 
-    return rsfd;
+    addr.s_addr = maskp;
+    strcpy(subnet_mask, inet_ntoa(addr));
+    if (subnet_mask == NULL) {
+        perror("inet_ntoa");
+        exit(0);
+    }
+
+    cout<<"ip : "<<ip<<endl;
+    cout<<"mask : "<<subnet_mask<<endl;
 }
 
 void printTCPHdr(char *packet,int sz){
@@ -121,27 +171,8 @@ void printARPHdr(char *packet,int sz){
 
 void printEthHdr(char *packet,int sz){
     if(sz>sizeof(struct ethhdr)){
-
-        struct iphdr *ipHeader=(struct iphdr*)(packet+sizeof(struct ethhdr));
-        // struct sockaddr_in source,dest;
-        // memset(&source, 0, sizeof(source));
-        // source.sin_addr.s_addr = ipHeader->saddr;
-        
-        // memset(&dest, 0, sizeof(dest));
-        // dest.sin_addr.s_addr = ipHeader->daddr;
-        // if(strcmp(inet_ntoa(source.sin_addr),"10.42.0.151")&&strcmp(inet_ntoa(source.sin_addr),"10.42.0.151")) return;
-        
         struct ethhdr *ethHdr=(struct ethhdr*)packet;
-        if(ethHdr->h_proto!=htons(ETH_P_ARP)) return;
-        struct ether_arp *arpHdr=(struct ether_arp*)(packet+sizeof(struct ethhdr));
-        string sip="",tip="";
-        for(int i=0;i<4;i++){
-            sip += to_string(arpHdr->arp_spa[i])+".";
-            tip += to_string(arpHdr->arp_tpa[i])+".";
-        }
-        sip.pop_back(); tip.pop_back();
-        if(sip!="10.42.0.151" && tip!="10.42.0.151") return;
-
+        
         cout<<"\nGot a Packet :"<<endl;
         printf("\nEthernet Header\n");
         printf("\t|-Source Address : %.2X-%.2X-%.2X-%.2X-%.2X-%.2X\n",ethHdr->h_source[0],ethHdr->h_source[1],ethHdr->h_source[2],ethHdr->h_source[3],ethHdr->h_source[4],ethHdr->h_source[5]);
@@ -152,16 +183,69 @@ void printEthHdr(char *packet,int sz){
     }
 }
 
-int main(){
-    int rsfd=getRsfd();
+void getSinglePacket(){
+    const u_char *packet;
+    struct pcap_pkthdr packet_header;
 
-    while(1){
-        char packet[6000]={'\0'};
-        int sz=recvfrom(rsfd,packet,sizeof packet,0,NULL,NULL);
-        if(sz<0){
-            perror("recv");
-            exit(0);
-        }
-        printEthHdr(packet,sz);
+    if((packet=pcap_next(handler,&packet_header))==NULL){
+        cout<<"No Packet"<<endl;
+        return;
     }
+
+    cout<<"\nFound a packet"<<endl;
+    cout<<"Packet capture length : "<<packet_header.caplen<<endl;
+    cout<<"Packet total length : "<<packet_header.len<<endl;
+    printEthHdr((char*)packet,packet_header.caplen);
 }
+
+void decodePacket(u_char *args, const struct pcap_pkthdr *packet_header, const u_char *packet){
+    printEthHdr((char*)packet,packet_header->caplen);
+}
+
+int main(){
+    findAllDevs();
+    cout<<"Select a device from above : ";
+    string devStr;
+    cin>>devStr;
+    device = new char[devStr.length() + 1];
+    strcpy(device,devStr.c_str());
+    getDevInfo();
+
+    // initialise session
+    if((handler=pcap_open_live(device,BUFSIZ,0,1000,errbuff))==NULL){
+        cout<<"openlive err : "<<errbuff<<endl;
+    }
+
+    cout<<"data link type : "<<pcap_datalink(handler)<<endl;
+
+    // filter code :
+    char filter[]="src host 10.42.0.151 or dst host 10.42.0.151 and arp";
+    struct bpf_program fp;
+    if (pcap_compile(handler, &fp, filter, 0, netp) == -1) {
+        printf("Bad filter - %s\n", pcap_geterr(handler));
+        exit(0);
+    }
+    if (pcap_setfilter(handler, &fp) == -1) {
+        printf("Error setting filter - %s\n", pcap_geterr(handler));
+        exit(0);
+    }
+
+    int flag;
+    cout<<"1-single packet;2-multi-packets : ";
+    cin>>flag;
+
+    if(flag==1) getSinglePacket();
+    else pcap_loop(handler,0,decodePacket,NULL);
+
+    return 0;
+}
+
+/*
+    // get device
+    char *device = pcap_lookupdev(errbuff);
+    if (device == NULL) {
+        cout<<"lookupdev err : "<<errbuff<<endl;
+        exit(0);
+    }
+    cout<<"device : "<<device<<endl;
+*/
