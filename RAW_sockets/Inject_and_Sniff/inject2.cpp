@@ -181,7 +181,7 @@ struct ether_arp createArpPacket(int rsfd){
     memset(&req.arp_tha,0,sizeof(req.arp_tha));
 
     struct in_addr target_ip_addr={0};
-    if (!inet_aton("10.42.0.151",&target_ip_addr)) {
+    if (!inet_aton("192.168.173.151",&target_ip_addr)) {
         perror("not a valid IP address");
         exit(1);
     }

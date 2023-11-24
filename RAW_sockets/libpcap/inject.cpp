@@ -1,8 +1,8 @@
 #include<bits/stdc++.h>
 #include<sys/socket.h>
 #include<arpa/inet.h>
-#include <netinet/ether.h>
-#include <netinet/if_ether.h>
+#include<netinet/ether.h>
+#include<netinet/if_ether.h>
 #include<linux/ip.h>
 #include<linux/udp.h>
 #include<linux/tcp.h>
@@ -131,58 +131,68 @@ struct ethhdr *createEthHdr(){
     return ethHdr;
 }
 
-struct ether_arp createArpPacket(int rsfd){
+struct ether_arp createArpPacket(){
     struct ether_arp req;
     req.arp_hrd=htons(ARPHRD_ETHER);
     req.arp_pro=htons(ETH_P_IP);
     req.arp_hln=ETHER_ADDR_LEN;
     req.arp_pln=sizeof(in_addr_t);
     req.arp_op=htons(ARPOP_REQUEST);
+    // req.arp_op=htons(ARPOP_REPLY);
     memset(&req.arp_tha,0,sizeof(req.arp_tha));
 
     struct in_addr target_ip_addr={0};
-    if (!inet_aton("10.42.0.151",&target_ip_addr)) {
+    if (!inet_aton("192.168.137.1",&target_ip_addr)) {
         perror("not a valid IP address");
         exit(1);
     }
     memcpy(&req.arp_tpa,&target_ip_addr.s_addr,sizeof(req.arp_tpa));
+
+    if (!inet_aton("192.168.137.241",&target_ip_addr)) {
+        perror("not a valid IP address");
+        exit(1);
+    }
+    memcpy(&req.arp_spa,&target_ip_addr.s_addr,sizeof(req.arp_tpa));
     
     struct ifreq ifr;
     bzero(&ifr,sizeof(ifr));
     strncpy((char*)ifr.ifr_name,"wlo1",IFNAMSIZ);
     // Obtain the source IP address, copy into ARP request
-    if (ioctl(rsfd,SIOCGIFADDR,&ifr)==-1) {
+    int fd=socket(AF_INET,SOCK_STREAM,0);
+    if(ioctl(fd,SIOCGIFADDR,&ifr)==-1) {
         perror(0);
-        close(rsfd);
+        close(fd);  
         exit(1);
     }
     struct sockaddr_in* source_ip_addr = (struct sockaddr_in*)&ifr.ifr_addr;
-    memcpy(&req.arp_spa,&source_ip_addr->sin_addr.s_addr,sizeof(req.arp_spa));
+    // memcpy(&req.arp_spa,&source_ip_addr->sin_addr.s_addr,sizeof(req.arp_spa));
 
     // Obtain the source MAC address, copy into Ethernet header and ARP request.
-    if (ioctl(rsfd,SIOCGIFHWADDR,&ifr)==-1) {
+    if (ioctl(fd,SIOCGIFHWADDR,&ifr)==-1) {
         perror(0);
-        close(rsfd);
+        close(fd);
         exit(1);
     }
     if (ifr.ifr_hwaddr.sa_family!=ARPHRD_ETHER) {
         fprintf(stderr,"not an Ethernet interface");
-        close(rsfd);
+        close(fd);
         exit(1);
     }
     const unsigned char* source_mac_addr=(unsigned char*)ifr.ifr_hwaddr.sa_data;
-    memcpy(&req.arp_sha,source_mac_addr,sizeof(req.arp_sha));
+    // memcpy(&req.arp_sha,source_mac_addr,sizeof(req.arp_sha));
+    memcpy(req.arp_sha,ether_aton("11:22:33:44:55:66"),sizeof(req.arp_sha));
+    memcpy(req.arp_tha,ether_aton("b6:6f:24:34:32:61"),sizeof(req.arp_tha));
 
     return req;
 }
 
-void sendARP(int rsfd){
+void sendARP(){
     struct ether_header header;
     header.ether_type=htons(ETH_P_ARP);
     memset(header.ether_dhost,0xff,sizeof(header.ether_dhost));
 
     struct ether_arp arpPacket;
-    arpPacket=createArpPacket(rsfd);
+    arpPacket=createArpPacket();
 
     memcpy(header.ether_shost,arpPacket.arp_sha,sizeof(header.ether_shost));
 
@@ -191,15 +201,36 @@ void sendARP(int rsfd){
     memcpy(frame,&header,sizeof(struct ether_header));
     memcpy(frame+sizeof(struct ether_header),&arpPacket,sizeof(struct ether_arp));
 
-    struct sockaddr_in caddr;
-    caddr.sin_family=AF_INET;
-    caddr.sin_addr.s_addr=INADDR_ANY;
-    int st=send(rsfd,frame,sizeof(frame),0);
-    if(st<0) perror("send");
+    cout<<"device name : ";
+    string devStr;
+    cin>>devStr;
+    device = new char[devStr.length() + 1];
+    strcpy(device,devStr.c_str());
+
+    if((handler=pcap_open_live(device,BUFSIZ,0,1000,errbuff))==NULL){
+        cout<<"openlive err : "<<errbuff<<endl;
+        exit(0);
+    }
+
+    if (pcap_inject(handler,frame,sizeof(struct ether_header)+sizeof(struct ether_arp))==-1) {
+        pcap_perror(handler,0);
+        pcap_close(handler);
+        exit(1);
+    }
+
+    pcap_close(handler);
+    
     cout<<"Sent arp"<<endl;
+
+    exit(EXIT_SUCCESS);
 }
 
 int main(){
+    cout<<"Enter 1 to send arp packet : ";
+    int flag;
+    cin>>flag;
+    if(flag==1) sendARP();
+
     unsigned char *packet;
 
     const char *data = "From injector"; 
